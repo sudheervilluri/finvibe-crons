@@ -1,0 +1,36 @@
+name: Frequent Price Refresh
+
+on:
+  schedule:
+    # Every 15 min, 09:00–16:00 IST (03:30–10:30 UTC), Mon–Fri
+    # Scheduled 5 min early to absorb GitHub Actions cron delay (up to 15-30 min)
+    - cron: '25,40 3 * * 1-5'       # fires ~09:00, 09:15 IST
+    - cron: '55 3 * * 1-5'          # fires ~09:30 IST
+    - cron: '10,25,40,55 4-9 * * 1-5'  # 09:45 – 15:30 IST
+    - cron: '10,25 10 * * 1-5'      # 15:45, 16:00 IST
+  workflow_dispatch:
+
+jobs:
+  frequent-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: SITE_URL
+    steps:
+      - name: Trigger Frequent Refresh
+        run: |
+          echo "🕒 Triggering price refresh at $(date -u '+%Y-%m-%d %H:%M:%S UTC')..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/hourly-refresh?key=${{ vars.CRON_SECRET }}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Refresh failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "✅ Refresh completed"

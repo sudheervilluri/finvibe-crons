@@ -1,0 +1,32 @@
+name: AMC Holdings Sync
+
+on:
+  schedule:
+    # Run at 2:00 AM IST daily (20:30 UTC previous day)
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-amc-holdings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: SITE_URL
+    steps:
+      - name: Trigger AMC Holdings Sync
+        run: |
+          echo "🏦 Triggering AMC holdings sync..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/full-mf-holdings?key=${{ vars.CRON_SECRET }}&force=true&limit=44&concurrency=5")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Request failed with status $HTTP_CODE"
+            exit 1
+          fi
+          
+          echo "✅ AMC holdings sync triggered successfully"

@@ -1,0 +1,37 @@
+name: Daily Refresh (Stage Analysis & RS)
+
+on:
+  schedule:
+    # Run at 1:30 AM IST daily (20:00 UTC previous day)
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  daily-refresh:
+    runs-on: ubuntu-latest
+    environment: SITE_URL
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Daily Refresh
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_STOCK_HISTORY_URI: ${{ secrets.MONGODB_STOCK_HISTORY_URI }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          YAHOO_FINANCE_API_KEY: ${{ secrets.YAHOO_FINANCE_API_KEY }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.SITE_URL }}
+        run: |
+          echo "🌅 Starting daily refresh (Stage Analysis, RS, DMA)..."
+          npm run daily-refresh
+          echo "✅ Daily refresh completed successfully"

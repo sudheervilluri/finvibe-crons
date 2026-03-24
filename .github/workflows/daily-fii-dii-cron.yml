@@ -1,0 +1,76 @@
+name: Daily FII/DII Sync
+
+on:
+  schedule:
+    # Run at 18:30 IST daily (13:00 UTC), Mon–Fri only (market days)
+    - cron: '0 13 * * 1-5'
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  daily-fii-dii:
+    runs-on: ubuntu-latest
+    environment: SITE_URL
+    timeout-minutes: 15
+    steps:
+      - name: Trigger Daily FII/DII Sync
+        env:
+          SITE_URL: "http://finvibe.in.net"
+          CRON_SECRET: ${{ vars.CRON_SECRET }}
+        run: |
+          BASE_URL="${SITE_URL%/}"
+
+          echo "📊 Triggering daily FII/DII activity sync at $(date -u '+%Y-%m-%d %H:%M:%S UTC')..."
+          echo "💡 Expected trigger time: 18:30 IST (13:00 UTC)"
+          echo "🔗 Endpoint: ${BASE_URL}/api/cron/daily-fii-dii"
+
+          # Validate required variables
+          if [ -z "$SITE_URL" ]; then
+            echo "❌ Error: SITE_URL variable not configured"
+            echo "📝 Please add SITE_URL in GitHub Settings > Environments > SITE_URL > Variables"
+            exit 1
+          fi
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "❌ Error: CRON_SECRET variable not configured"
+            echo "📝 Please add CRON_SECRET in GitHub Settings > Environments > SITE_URL > Variables"
+            exit 1
+          fi
+
+          # Make the API call
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" --max-time 310 \
+            "${BASE_URL}/api/cron/daily-fii-dii?key=${CRON_SECRET}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "📤 Request sent to: ${BASE_URL}/api/cron/daily-fii-dii"
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ FII/DII sync failed with status $HTTP_CODE"
+            echo "Response body: $BODY"
+            exit 1
+          fi
+
+          # Parse response for key details
+          ACTIVITY_DATE=$(echo "$BODY" | grep -o '"activityDate":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+          FII_NET=$(echo "$BODY" | grep -o '"fiiNet":[^,}]*' | cut -d':' -f2 || echo "?")
+          DII_NET=$(echo "$BODY" | grep -o '"diiNet":[^,}]*' | cut -d':' -f2 || echo "?")
+          ELAPSED=$(echo "$BODY" | grep -o '"elapsedMs":[^,}]*' | cut -d':' -f2 || echo "?")
+
+          echo ""
+          echo "✅ FII/DII sync completed successfully"
+          echo "   📅 Activity Date: $ACTIVITY_DATE"
+          echo "   📈 FII Net: ₹$FII_NET Cr"
+          echo "   📉 DII Net: ₹$DII_NET Cr"
+          echo "   ⏱️  Execution Time: ${ELAPSED}ms"
+          echo ""
+          echo "📊 Data has been successfully synced to MongoDB"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️ FII/DII sync workflow failed"
+          echo "Check the logs above for details"
+          exit 1

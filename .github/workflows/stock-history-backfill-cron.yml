@@ -1,0 +1,32 @@
+name: Daily Stock History Backfill
+
+on:
+  schedule:
+    # Run at 12:20 AM IST daily (18:50 UTC previous day)
+    - cron: '50 18 * * *'
+  workflow_dispatch:
+
+jobs:
+  backfill-stock-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: SITE_URL
+    steps:
+      - name: Trigger Daily Stock History Backfill
+        run: |
+          echo "📈 Triggering daily stock history backfill..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/daily-stock-history?key=${{ vars.CRON_SECRET }}&days=2&concurrency=8&writeBatchSize=20&includeIndices=true")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Request failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "✅ Daily stock history backfill started successfully"

@@ -1,0 +1,86 @@
+name: Stock Events Cron
+
+on:
+  schedule:
+    # Hourly during market window in IST (09:00-18:00) on weekdays.
+    # UTC equivalent: 03:30 to 12:30 Monday-Friday.
+    - cron: '30 3-12 * * 1-5'
+    # Nightly cleanup at 11:00 PM IST (17:30 UTC).
+    - cron: '30 17 * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to run'
+        required: true
+        default: ingest
+        type: choice
+        options:
+          - ingest
+          - cleanup
+          - both
+
+jobs:
+  stock-events:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: SITE_URL
+    steps:
+      - name: Trigger Stock Event Ingestion (Scheduled)
+        if: ${{ github.event_name == 'schedule' && github.event.schedule == '30 3-12 * * 1-5' }}
+        run: |
+          echo "🕒 Triggering hourly stock event ingestion..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/portfolio-event-feed?key=${{ vars.CRON_SECRET }}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "202" ]; then
+            echo "❌ Ingestion failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Trigger Stock Event Cleanup (Scheduled)
+        if: ${{ github.event_name == 'schedule' && github.event.schedule == '30 17 * * *' }}
+        run: |
+          echo "🧹 Triggering nightly stock event cleanup..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/portfolio-event-cleanup?key=${{ vars.CRON_SECRET }}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Cleanup failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Trigger Stock Event Ingestion (Manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.action == 'ingest' || inputs.action == 'both') }}
+        run: |
+          echo "🚀 Manually triggering stock event ingestion..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/portfolio-event-feed?key=${{ vars.CRON_SECRET }}&force=true")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "202" ]; then
+            echo "❌ Manual ingestion failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Trigger Stock Event Cleanup (Manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.action == 'cleanup' || inputs.action == 'both') }}
+        run: |
+          echo "🧹 Manually triggering stock event cleanup..."
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+            "${{ vars.SITE_URL }}/api/cron/portfolio-event-cleanup?key=${{ vars.CRON_SECRET }}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Manual cleanup failed with status $HTTP_CODE"
+            exit 1
+          fi

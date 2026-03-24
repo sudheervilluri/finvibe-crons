@@ -1,0 +1,65 @@
+name: Daily Maintenance
+
+on:
+  schedule:
+    # Run at midnight IST (18:30 UTC previous day)
+    - cron: '30 18 * * *'
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: SITE_URL
+    steps:
+      - name: Refresh Stock Master Data
+        run: |
+          echo "🔄 Refreshing Stock Master Data..."
+          curl -s -L -f "${{ vars.SITE_URL }}/api/stocks/refresh?key=${{ vars.CRON_SECRET }}" || echo "⚠️ Warning: Stock refresh failed"
+      - name: Trigger Daily BSE Concall Link Sync
+        run: |
+          echo "🔗 Triggering daily BSE transcript link sync..."
+          curl -s -L -f "${{ vars.SITE_URL }}/api/cron/daily-concall-links?key=${{ vars.CRON_SECRET }}" || echo "⚠️ Warning: Daily BSE transcript link sync failed"
+      - name: Trigger Daily Fundamentals Sync
+        run: |
+          echo "📊 Triggering daily fundamentals sync (ROCE/ROE/PE) in paginated batches..."
+          OFFSET=0
+          LIMIT=50
+          CONCURRENCY=5
+          BATCH=1
+
+          TOTAL_START=$(date +%s)
+
+          while true; do
+            BATCH_START=$(date +%s)
+            echo "--- Batch $BATCH (offset=$OFFSET, limit=$LIMIT) ---"
+            RESPONSE=$(curl -s -L -w "\n%{http_code}" --max-time 310 \
+              "${{ vars.SITE_URL }}/api/cron/daily-fundamentals?key=${{ vars.CRON_SECRET }}&limit=$LIMIT&offset=$OFFSET&concurrency=$CONCURRENCY")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+            BATCH_END=$(date +%s)
+            BATCH_SECS=$((BATCH_END - BATCH_START))
+            TOTAL_SECS=$((BATCH_END - TOTAL_START))
+
+            # Parse fields from JSON response
+            PROCESSED=$(echo "$BODY" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*' || echo "?")
+            ERRORS=$(echo "$BODY" | grep -o '"errors":[0-9]*' | grep -o '[0-9]*' || echo "?")
+            REMAINING=$(echo "$BODY" | grep -o '"remaining":[0-9]*' | grep -o '[0-9]*' || echo "0")
+
+            echo "HTTP $HTTP_CODE | batch=${BATCH_SECS}s | total=${TOTAL_SECS}s | processed=$PROCESSED errors=$ERRORS remaining=$REMAINING"
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "❌ Batch $BATCH failed with status $HTTP_CODE"
+              echo "Response: $BODY"
+              exit 1
+            fi
+
+            if [ "$REMAINING" = "0" ] || [ -z "$REMAINING" ]; then
+              echo "✅ All batches completed in ${TOTAL_SECS}s"
+              break
+            fi
+
+            OFFSET=$((OFFSET + LIMIT))
+            BATCH=$((BATCH + 1))
+          done
