@@ -9,90 +9,26 @@ on:
 jobs:
   daily-refresh:
     runs-on: ubuntu-latest
-    environment: SITE_URL
     timeout-minutes: 90
     steps:
-      - name: Trigger Daily Refresh
-        id: trigger
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Daily Refresh
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_STOCK_HISTORY_URI: ${{ secrets.MONGODB_STOCK_HISTORY_URI }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          YAHOO_FINANCE_API_KEY: ${{ secrets.YAHOO_FINANCE_API_KEY }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.SITE_URL }}
         run: |
-          echo "🌅 Triggering daily refresh at $(date -u '+%Y-%m-%d %H:%M:%S UTC')..."
-
-          RESPONSE=$(curl -s -L -w "\n%{http_code}" --max-time 30 \
-            "${{ vars.SITE_URL }}/api/cron/daily-refresh?key=${{ vars.CRON_SECRET }}")
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
-
-          echo "HTTP Status: $HTTP_CODE"
-          echo "Response: $BODY"
-
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Failed to trigger daily refresh (status $HTTP_CODE)"
-            exit 1
-          fi
-
-          JOB_ID=$(echo "$BODY" | grep -o '"jobId":"[^"]*"' | cut -d'"' -f4)
-          if [ -z "$JOB_ID" ]; then
-            echo "❌ No jobId returned"
-            exit 1
-          fi
-
-          echo "✅ Job started: $JOB_ID"
-          echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
-
-      - name: Poll Job Status
-        run: |
-          JOB_ID="${{ steps.trigger.outputs.job_id }}"
-          SITE_URL="${{ vars.SITE_URL }}"
-          KEY="${{ vars.CRON_SECRET }}"
-          STATUS_URL="${SITE_URL}/api/cron/daily-refresh/status?key=${KEY}&jobId=${JOB_ID}"
-
-          echo "📊 Polling status for job: $JOB_ID"
-          echo "🔗 $STATUS_URL"
-          echo ""
-
-          MAX_WAIT=5400  # 90 minutes
-          ELAPSED=0
-          INTERVAL=30
-
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
-            RESPONSE=$(curl -s -L -w "\n%{http_code}" --max-time 15 "$STATUS_URL")
-            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-            BODY=$(echo "$RESPONSE" | head -n -1)
-
-            if [ "$HTTP_CODE" != "200" ]; then
-              echo "⚠️  Poll failed (HTTP $HTTP_CODE), retrying..."
-              sleep $INTERVAL
-              ELAPSED=$((ELAPSED + INTERVAL))
-              continue
-            fi
-
-            STATUS=$(echo "$BODY" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
-            PHASE=$(echo "$BODY" | grep -o '"phase":[0-9]*' | grep -o '[0-9]*' | head -1)
-            LABEL=$(echo "$BODY" | grep -o '"phaseLabel":"[^"]*"' | cut -d'"' -f4)
-            ELAPSED_MS=$(echo "$BODY" | grep -o '"elapsedMs":[0-9]*' | grep -o '[0-9]*')
-
-            ELAPSED_MIN=$((ELAPSED / 60))
-            echo "[${ELAPSED_MIN}m elapsed] Status: $STATUS | Phase $PHASE: $LABEL"
-
-            if [ "$STATUS" = "completed" ]; then
-              ELAPSED_SEC=$((ELAPSED_MS / 1000))
-              echo ""
-              echo "✅ Daily refresh completed in ${ELAPSED_SEC}s"
-              echo "$BODY" | grep -o '"result":{[^}]*}' || true
-              exit 0
-            fi
-
-            if [ "$STATUS" = "failed" ]; then
-              ERROR=$(echo "$BODY" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
-              echo ""
-              echo "❌ Daily refresh failed: $ERROR"
-              exit 1
-            fi
-
-            sleep $INTERVAL
-            ELAPSED=$((ELAPSED + INTERVAL))
-          done
-
-          echo "❌ Timed out after ${MAX_WAIT}s waiting for job $JOB_ID"
-          exit 1
+          echo "🌅 Starting daily refresh (Stage Analysis, RS, DMA)..."
+          npm run daily-refresh
+          echo "✅ Daily refresh completed successfully"

@@ -9,24 +9,26 @@ on:
 jobs:
   backfill-stock-history:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: SITE_URL
+    timeout-minutes: 60
     steps:
-      - name: Trigger Daily Stock History Backfill
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Stock History Backfill
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_STOCK_HISTORY_URI: ${{ secrets.MONGODB_STOCK_HISTORY_URI }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          DAYS: '2'
+          CONCURRENCY: '8'
+          WRITE_BATCH_SIZE: '20'
+          INCLUDE_INDICES: 'true'
         run: |
-          echo "📈 Triggering daily stock history backfill..."
-          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
-            "${{ vars.SITE_URL }}/api/cron/daily-stock-history?key=${{ vars.CRON_SECRET }}&days=2&concurrency=8&writeBatchSize=20&includeIndices=true")
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
-
-          echo "HTTP Status: $HTTP_CODE"
-          echo "Response: $BODY"
-
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Request failed with status $HTTP_CODE"
-            exit 1
-          fi
-
-          echo "✅ Daily stock history backfill started successfully"
+          echo "📈 Starting daily stock history backfill..."
+          npm run stock-history-backfill
+          echo "✅ Stock history backfill completed successfully"
