@@ -12,11 +12,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: sudheervilluri/pftracker
+          token: ${{ secrets.GH_PAT }}
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
       - name: Install dependencies
         run: npm ci
       - name: Run Daily Refresh
