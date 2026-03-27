@@ -12,10 +12,25 @@ jobs:
     timeout-minutes: 60
     environment: SITE_URL
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: sudheervilluri/pftracker
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Refresh Stock Master Data
-        run: |
-          echo "🔄 Refreshing Stock Master Data..."
-          curl -s -L -f "${{ vars.SITE_URL }}/api/stocks/refresh?key=${{ vars.CRON_SECRET }}" || echo "⚠️ Warning: Stock refresh failed"
+        run: npm run refresh-stock-master
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+
       - name: Trigger Daily BSE Concall Link Sync
         run: |
           echo "🔗 Triggering daily BSE transcript link sync..."
