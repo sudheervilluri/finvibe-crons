@@ -26,11 +26,11 @@ jobs:
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_STOCK_HISTORY_URI: ${{ secrets.MONGODB_STOCK_HISTORY_URI }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_SECRET: ${{ vars.CRON_SECRET }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           YAHOO_FINANCE_API_KEY: ${{ secrets.YAHOO_FINANCE_API_KEY }}
-          SITE_URL: ${{ secrets.SITE_URL }}
-          NEXT_PUBLIC_APP_URL: ${{ secrets.SITE_URL }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.SITE_URL }}
         run: |
           echo "🌅 Starting daily refresh (Stage Analysis, RS, DMA)..."
           npm run daily-refresh

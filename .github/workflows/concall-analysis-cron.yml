@@ -1,0 +1,46 @@
+name: Daily Concall Analysis
+
+on:
+  schedule:
+    # Run at 8:00 PM UTC (1:30 AM IST)
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  bulk-concall-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: SITE_URL
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: sudheervilluri/pftracker
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Bulk Concall Analysis (Last 3 Days)
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_STOCK_HISTORY_URI: ${{ secrets.MONGODB_STOCK_HISTORY_URI }}
+          CRON_SECRET: ${{ vars.CRON_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_ENABLED: 'true'
+          LOCAL_LLM_URL: ${{ vars.LOCAL_LLM_URL }}
+          LOCAL_LLM_API_KEY: ${{ secrets.LOCAL_LLM_API_KEY }}
+          LOCAL_LLM_MODEL: ${{ secrets.LOCAL_LLM_MODEL }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.SITE_URL }}
+        run: |
+          echo "🚀 Starting daily bulk concall analysis (Links from last 3 days)..."
+          npx tsx scripts/bulk-concall-analysis-q4.ts --days 3
+          echo "✅ Bulk concall analysis completed successfully"

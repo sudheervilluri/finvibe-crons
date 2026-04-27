@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Trigger Daily FII/DII Sync
         env:
-          SITE_URL: "http://finvibe.in.net"
+          SITE_URL: ${{ vars.SITE_URL }}
           CRON_SECRET: ${{ vars.CRON_SECRET }}
         run: |
           BASE_URL="${SITE_URL%/}"
