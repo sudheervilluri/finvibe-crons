@@ -40,6 +40,8 @@ jobs:
           LOCAL_LLM_MODEL: ${{ secrets.LOCAL_LLM_MODEL }}
           SITE_URL: ${{ vars.SITE_URL }}
           NEXT_PUBLIC_APP_URL: ${{ vars.SITE_URL }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: |
           echo "🚀 Starting daily bulk concall analysis (Links from last 3 days)..."
           npx tsx scripts/bulk-concall-analysis-q4.ts --days 3
