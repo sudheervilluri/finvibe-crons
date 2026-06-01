@@ -2,8 +2,8 @@ name: Daily Concall Analysis
 
 on:
   schedule:
-    # Run at 8:00 PM UTC (1:30 AM IST)
-    - cron: '0 20 * * *'
+    # Run every 2 hours
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
