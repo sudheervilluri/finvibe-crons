@@ -2,7 +2,7 @@ name: Daily Stock History Backfill
 
 on:
   schedule:
-    # Run at 12:20 AM IST daily (18:50 UTC previous day)
+    # Run at 12:20 AM IST daily (18:50 UTC previous day) 
     - cron: '50 18 * * *'
   workflow_dispatch:
 
