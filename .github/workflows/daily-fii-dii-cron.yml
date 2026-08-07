@@ -1,9 +1,10 @@
-name: Daily FII/DII Sync
+name: Daily FII/DII Sync [DEPRECATED / DISABLED]
 
+# DEPRECATED / DISABLED — Managed by pftracker-backend daily_fii_dii_sync.yml
 on:
-  schedule:
-    # Run at 18:30 IST daily (13:00 UTC), Mon–Fri only (market days)
-    - cron: '0 13 * * 1-5'
+  # schedule:
+  #   # Run at 18:30 IST daily (13:00 UTC), Mon–Fri only (market days)
+  #   - cron: '0 13 * * 1-5'
   workflow_dispatch: # Allow manual trigger from GitHub UI
 
 jobs:

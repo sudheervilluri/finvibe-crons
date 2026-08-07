@@ -1,9 +1,10 @@
-name: Daily Stock History Backfill
+name: Daily Stock History Backfill [DEPRECATED / DISABLED]
 
+# DEPRECATED / DISABLED — Managed by pftracker-backend workflows
 on:
-  schedule:
-    # Run at 12:20 AM IST daily (18:50 UTC previous day) 
-    - cron: '50 18 * * *'
+  # schedule:
+  #   # Run at 12:20 AM IST daily (18:50 UTC previous day) 
+  #   - cron: '50 18 * * *'
   workflow_dispatch:
 
 jobs:

@@ -1,12 +1,13 @@
-name: Stock Events Cron
+name: Stock Events Cron [DEPRECATED / DISABLED]
 
+# DEPRECATED / DISABLED — Managed by pftracker-backend workflows
 on:
-  schedule:
-    # Hourly during market window in IST (09:00-18:00) on weekdays.
-    # UTC equivalent: 03:30 to 12:30 Monday-Friday.
-    - cron: '30 3-12 * * 1-5'
-    # Nightly cleanup at 11:00 PM IST (17:30 UTC).
-    - cron: '30 17 * * *'
+  # schedule:
+  #   # Hourly during market window in IST (09:00-18:00) on weekdays.
+  #   # UTC equivalent: 03:30 to 12:30 Monday-Friday.
+  #   - cron: '30 3-12 * * 1-5'
+  #   # Nightly cleanup at 11:00 PM IST (17:30 UTC).
+  #   - cron: '30 17 * * *'
   workflow_dispatch:
     inputs:
       action:
