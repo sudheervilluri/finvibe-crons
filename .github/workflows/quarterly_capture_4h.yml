@@ -1,0 +1,101 @@
+name: Quarterly capture (every 4h until 11PM)
+
+on:
+  workflow_dispatch:
+    inputs:
+      quarter_key:
+        description: "Optional override (e.g. Q4_2026). Leave blank to derive from today's date (Indian FY)."
+        required: false
+        type: string
+      manual_url:
+        description: "Override API Base URL (optional)"
+        required: false
+        default: ""
+  schedule:
+    # Runs at 03:00, 07:00, 11:00, 15:00, 19:00, 23:00 UTC.
+    # This satisfies "every 4h" with the last trigger at 11PM in the configured timezone (UTC here).
+    # If you want 11PM in a different timezone, convert those local hours to UTC and update this list.
+    - cron: "0 3,7,11,15,19,23 * * *"
+    # Weekly historical sweep (Sunday midnight UTC)
+    - cron: "0 0 * * 0"
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate configuration
+        id: config
+        run: |
+          BASE_URL="${{ github.event.inputs.manual_url }}"
+          [[ -z "$BASE_URL" ]] && BASE_URL="${{ secrets.API_BASE_URL }}"
+
+          if [[ -z "$BASE_URL" ]]; then
+            echo "::error::API_BASE_URL is not configured in environment secrets."
+            exit 1
+          fi
+
+          BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+          echo "override_quarter_key=${{ github.event.inputs.quarter_key }}" >> $GITHUB_OUTPUT
+
+      - name: Service health check
+        run: |
+          curl -s --fail --max-time 10 "${{ steps.config.outputs.base_url }}/health" || {
+            echo "::error::Target service is unreachable or unhealthy."
+            exit 1
+          }
+
+      - name: Trigger 3-day results capture
+        if: github.event_name != 'schedule' || github.event.schedule != '0 0 * * 0'
+        env:
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          API_SECRET_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+        run: |
+          URL="$BASE_URL/results/ingest/xbrl?days=3"
+          echo "Calling: $URL"
+
+          RESPONSE=$(curl -s -X POST -w "\n%{http_code}" \
+            "$URL" \
+            -H "Authorization: Bearer $API_SECRET_TOKEN" \
+            --retry 3 \
+            --retry-delay 5 \
+            --max-time 600)
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status: $HTTP_STATUS"
+          echo "Body: $BODY"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::3-day capture trigger failed with status $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Trigger weekly historical sweep
+        if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0'
+        env:
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          API_SECRET_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+        run: |
+          URL="$BASE_URL/quarterly-results/sweep"
+          echo "Calling: $URL"
+
+          RESPONSE=$(curl -s -X POST -w "\n%{http_code}" \
+            "$URL" \
+            -H "Authorization: Bearer $API_SECRET_TOKEN" \
+            --retry 3 \
+            --retry-delay 5 \
+            --max-time 600)
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status: $HTTP_STATUS"
+          echo "Body: $BODY"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Weekly historical sweep trigger failed with status $HTTP_STATUS"
+            exit 1
+          fi

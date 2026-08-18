@@ -1,0 +1,100 @@
+name: Daily Concall Sweep
+
+on:
+  schedule:
+    - cron: '0 17 * * *'  # 17:00 UTC / 12:00 PM CT
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to check'
+        required: true
+        default: '3'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Sweep BSE/NSE Concalls
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Validate Configuration
+        id: config
+        run: |
+          BASE_URL="${{ secrets.API_BASE_URL }}"
+          if [[ -z "$BASE_URL" ]]; then
+            echo "::error::API_BASE_URL is not configured in environment secrets."
+            exit 1
+          fi
+          # Normalize URL
+          BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+          echo "days=${{ github.event.inputs.days || '3' }}" >> $GITHUB_OUTPUT
+
+      - name: Service Health Check
+        run: |
+          curl -s --fail --max-time 10 "${{ steps.config.outputs.base_url }}/health" || {
+            echo "::error::Target service is unreachable."
+            exit 1
+          }
+
+      - name: Trigger Backfill
+        env:
+          API_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          DAYS: ${{ steps.config.outputs.days }}
+        run: |
+          echo "🚀 Triggering concall backfill for last $DAYS days..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
+            "$BASE_URL/concall-links/backfill?days=$DAYS" \
+            -H "Authorization: Bearer $API_TOKEN")
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status: $HTTP_STATUS"
+          echo "Body: $BODY"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Trigger failed"
+            exit 1
+          fi
+          
+          echo "✅ Concall sweep triggered successfully."
+
+      - name: Wait for Concall Links Discovery
+        run: |
+          echo "Waiting 5 minutes (300 seconds) for concall links to be fully discovered and saved..."
+          sleep 300
+
+      - name: Trigger Concall AI Analysis
+        if: github.event_name != 'schedule' || github.event.schedule != '0 0 * * 0'
+        env:
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          API_SECRET_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          DAYS: ${{ steps.config.outputs.days }}
+        run: |
+          URL="$BASE_URL/concall-analysis/run?days=$DAYS"
+          echo "Calling: $URL"
+
+          RESPONSE=$(curl -s -X POST -w "\n%{http_code}" \
+            "$URL" \
+            -H "Authorization: Bearer $API_SECRET_TOKEN" \
+            --retry 3 \
+            --retry-delay 5 \
+            --max-time 600)
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status: $HTTP_STATUS"
+          echo "Body: $BODY"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Concall AI analysis trigger failed with status $HTTP_STATUS"
+            exit 1
+          fi

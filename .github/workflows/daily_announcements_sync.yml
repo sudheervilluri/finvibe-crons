@@ -1,0 +1,72 @@
+name: Daily Announcements AI Sync
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to sync'
+        required: true
+        default: '1'
+      exchange:
+        description: 'Exchange (ALL/NSE/BSE)'
+        required: true
+        default: 'ALL'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Announcements AI Sync
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate Configuration
+        id: config
+        run: |
+          BASE_URL="${{ secrets.API_BASE_URL }}"
+          if [[ -z "$BASE_URL" ]]; then
+            echo "::error::API_BASE_URL is not configured in environment secrets."
+            exit 1
+          fi
+          BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+          echo "days=${{ github.event.inputs.days || '1' }}" >> $GITHUB_OUTPUT
+          echo "exchange=${{ github.event.inputs.exchange || 'ALL' }}" >> $GITHUB_OUTPUT
+
+      - name: Service Health Check
+        run: |
+          curl -s --fail --max-time 10 "${{ steps.config.outputs.base_url }}/health" || {
+            echo "::error::Target service is unreachable or unhealthy."
+            exit 1
+          }
+
+      - name: Trigger Announcements Sync
+        run: |
+          echo "🚀 Initiating announcements AI sync for last ${{ steps.config.outputs.days }} day(s) on ${{ steps.config.outputs.exchange }}..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ steps.config.outputs.base_url }}/corporate-actions/sync-announcements?days=${{ steps.config.outputs.days }}&exchange=${{ steps.config.outputs.exchange }}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.API_SECRET_TOKEN }}" \
+            --retry 3 \
+            --retry-delay 5 \
+            --max-time 300)
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "📡 API Response Status: $HTTP_STATUS"
+          echo "📦 Response Body: $BODY"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Sync failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Announcements sync started successfully in background."

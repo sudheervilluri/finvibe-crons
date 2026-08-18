@@ -1,0 +1,56 @@
+name: Frequent Stock Price Refresh (15 Min)
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Trigger every 15 minutes
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  frequent_price_refresh:
+    name: Frequent Price & Metrics Refresh
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Validate Configuration
+        id: config
+        run: |
+          BASE_URL="${{ secrets.API_BASE_URL }}"
+          if [[ -z "$BASE_URL" ]]; then
+            echo "::error::API_BASE_URL is not configured in environment secrets."
+            exit 1
+          fi
+          BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+
+      - name: Service Health Check
+        run: |
+          echo "🔍 Performing pre-flight health check at ${{ steps.config.outputs.base_url }}/health"
+          curl -s --fail --max-time 10 "${{ steps.config.outputs.base_url }}/health" || {
+            echo "::error::Target service is unreachable or unhealthy."
+            exit 1
+          }
+
+      - name: Trigger Frequent Stock Prices Refresh
+        env:
+          API_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+        run: |
+          echo "🕒 Triggering stock price refresh endpoint ($BASE_URL/admin/refresh-prices)..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            "$BASE_URL/admin/refresh-prices" \
+            -H "Authorization: Bearer $API_TOKEN")
+          
+          cat response.json
+          echo ""
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Stock metrics refresh failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Stock metrics refresh triggered successfully."

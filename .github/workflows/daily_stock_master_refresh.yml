@@ -1,0 +1,74 @@
+name: Daily Stock Master Refresh
+
+on:
+  schedule:
+    - cron: '30 10 * * 1-5'  # Weekdays (Mon-Fri) at 10:30 UTC (16:00 IST / 4:00 PM IST)
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh_stock_master:
+    name: Stock Master Refresh
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Validate Configuration
+        id: config
+        run: |
+          BASE_URL="${{ secrets.API_BASE_URL }}"
+          if [[ -z "$BASE_URL" ]]; then
+            echo "::error::API_BASE_URL is not configured in environment secrets."
+            exit 1
+          fi
+          # Normalize URL (remove trailing slashes)
+          BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+
+      - name: Service Health Check
+        run: |
+          echo "🔍 Performing pre-flight health check at ${{ steps.config.outputs.base_url }}/health"
+          curl -s --fail --max-time 10 "${{ steps.config.outputs.base_url }}/health" || {
+            echo "::error::Target service is unreachable or unhealthy."
+            exit 1
+          }
+
+      - name: Trigger Stock Master Refresh
+        env:
+          API_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+        run: |
+          echo "Triggering Stock Master refresh..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            "$BASE_URL/admin/refresh-stocks" \
+            -H "Authorization: Bearer $API_TOKEN")
+          
+          cat response.json
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Stock master refresh failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Stock master refresh triggered successfully."
+
+      - name: Trigger Stock Metrics Refresh
+        env:
+          API_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+        run: |
+          echo "Triggering Stock Metrics refresh..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            "$BASE_URL/admin/refresh-metrics" \
+            -H "Authorization: Bearer $API_TOKEN")
+          
+          cat response.json
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Stock metrics refresh failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Stock metrics & EOD price history refresh triggered successfully."

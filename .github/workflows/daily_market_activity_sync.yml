@@ -1,0 +1,80 @@
+name: Daily Market Activity Sync
+
+on:
+  schedule:
+    - cron: '30 * * * *'  # Every hour at :30 (offset from announcements)
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to sync'
+        required: true
+        default: '2'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync_activity:
+    name: Market Activity Sync
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate Configuration
+        id: config
+        run: |
+          BASE_URL="${{ secrets.API_BASE_URL }}"
+          if [[ -z "$BASE_URL" ]]; then
+            echo "::error::API_BASE_URL is not configured in environment secrets."
+            exit 1
+          fi
+          # Normalize URL (remove trailing slashes)
+          BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+          echo "days=${{ github.event.inputs.days || '2' }}" >> $GITHUB_OUTPUT
+
+      - name: Service Health Check
+        run: |
+          echo "🔍 Performing pre-flight health check at ${{ steps.config.outputs.base_url }}/health"
+          curl -s --fail --max-time 10 "${{ steps.config.outputs.base_url }}/health" || {
+            echo "::error::Target service is unreachable or unhealthy."
+            exit 1
+          }
+
+      - name: Sync Promoter Activity
+        env:
+          API_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          SYNC_DAYS: ${{ steps.config.outputs.days }}
+        run: |
+          echo "Syncing Promoter Activity for $SYNC_DAYS days..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            "$BASE_URL/promoter-activity/sync?days=$SYNC_DAYS" \
+            -H "Authorization: Bearer $API_TOKEN")
+          
+          cat response.json
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Promoter sync failed with status $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Sync Bulk & Block Deals
+        env:
+          API_TOKEN: ${{ secrets.API_SECRET_TOKEN }}
+          BASE_URL: ${{ steps.config.outputs.base_url }}
+          SYNC_DAYS: ${{ steps.config.outputs.days }}
+        run: |
+          echo "Syncing Bulk Deals for $SYNC_DAYS days..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            "$BASE_URL/bulk-deals/sync?days=$SYNC_DAYS" \
+            -H "Authorization: Bearer $API_TOKEN")
+          
+          cat response.json
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "::error::Bulk deals sync failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Market activity sync completed successfully."
