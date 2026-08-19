@@ -2,7 +2,12 @@ name: Frequent Stock Price Refresh (15 Min)
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Trigger every 15 minutes
+    # Market hours only (NSE/BSE 9:15am-3:30pm IST = 3:45am-10:00am UTC), weekdays.
+    # Running 24/7 was hammering Yahoo's quote API outside trading hours for no
+    # benefit and contributing to 429 rate-limiting.
+    - cron: '45 3 * * 1-5'
+    - cron: '*/15 4-9 * * 1-5'
+    - cron: '0 10 * * 1-5'
   workflow_dispatch:
 
 concurrency:
