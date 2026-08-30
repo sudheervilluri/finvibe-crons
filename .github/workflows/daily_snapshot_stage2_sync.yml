@@ -1,8 +1,8 @@
 name: Daily Index Snapshot & Stage 2 Analysis Sync
 
 on:
-  schedule:
-    - cron: '30 11 * * 1-5'  # Weekdays (Mon-Fri) at 11:30 UTC (17:00 IST / 5:00 PM IST)
+#  schedule:
+#    - cron: '30 11 * * 1-5'  # Weekdays (Mon-Fri) at 11:30 UTC (17:00 IST / 5:00 PM IST)
   workflow_dispatch:
     inputs:
       force_stage2:

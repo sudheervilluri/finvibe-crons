@@ -1,8 +1,8 @@
 name: Daily Stock Master Refresh
 
 on:
-  schedule:
-    - cron: '30 10 * * 1-5'  # Weekdays (Mon-Fri) at 10:30 UTC (16:00 IST / 4:00 PM IST)
+#  schedule:
+#    - cron: '30 10 * * 1-5'  # Weekdays (Mon-Fri) at 10:30 UTC (16:00 IST / 4:00 PM IST)
   workflow_dispatch:
 
 concurrency:

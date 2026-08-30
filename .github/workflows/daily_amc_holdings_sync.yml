@@ -1,8 +1,8 @@
 name: Daily AMC Holdings Sync
 
 on:
-  schedule:
-    - cron: '0 2 * * *'  # 2:00 AM UTC daily
+#  schedule:
+#    - cron: '0 2 * * *'  # 2:00 AM UTC daily
   workflow_dispatch:
     inputs:
       month:
@@ -37,14 +37,15 @@ jobs:
           BASE_URL=$(echo "$BASE_URL" | sed 's:/*$::')
           echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
 
-          # Determine Month and Year (default to current if not provided)
+          # Determine Month and Year. AMC portfolio disclosures lag ~1 calendar
+          # month (e.g. July's holdings are published in August), so default to
+          # the PREVIOUS month, not the current one -- syncing "this month" every
+          # day was targeting a report that doesn't exist yet for most of the month.
           MONTH="${{ github.event.inputs.month }}"
           YEAR="${{ github.event.inputs.year }}"
-          if [[ -z "$MONTH" ]]; then
-            MONTH=$(date +%-m)
-          fi
-          if [[ -z "$YEAR" ]]; then
-            YEAR=$(date +%Y)
+          if [[ -z "$MONTH" || -z "$YEAR" ]]; then
+            MONTH=$(date -d "-1 month" +%-m)
+            YEAR=$(date -d "-1 month" +%Y)
           fi
           echo "month=$MONTH" >> $GITHUB_OUTPUT
           echo "year=$YEAR" >> $GITHUB_OUTPUT

@@ -11,13 +11,13 @@ on:
         description: "Override API Base URL (optional)"
         required: false
         default: ""
-  schedule:
+#  schedule:
     # Runs at 03:00, 07:00, 11:00, 15:00, 19:00, 23:00 UTC.
     # This satisfies "every 4h" with the last trigger at 11PM in the configured timezone (UTC here).
     # If you want 11PM in a different timezone, convert those local hours to UTC and update this list.
-    - cron: "0 3,7,11,15,19,23 * * *"
+#    - cron: "0 3,7,11,15,19,23 * * *"
     # Weekly historical sweep (Sunday midnight UTC)
-    - cron: "0 0 * * 0"
+#    - cron: "0 0 * * 0"
 
 jobs:
   trigger:

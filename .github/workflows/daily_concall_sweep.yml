@@ -1,8 +1,8 @@
 name: Daily Concall Sweep
 
 on:
-  schedule:
-    - cron: '0 17 * * *'  # 17:00 UTC / 12:00 PM CT
+#  schedule:
+#    - cron: '0 17 * * *'  # 17:00 UTC / 12:00 PM CT
   workflow_dispatch:
     inputs:
       days:

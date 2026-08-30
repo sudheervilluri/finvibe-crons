@@ -1,8 +1,8 @@
 name: Daily FII / DII Activity Sync
 
 on:
-  schedule:
-    - cron: '0 13 * * *'  # 18:30 IST (13:00 UTC) everyday
+#  schedule:
+#    - cron: '0 13 * * *'  # 18:30 IST (13:00 UTC) everyday
   workflow_dispatch:
 
 concurrency:
